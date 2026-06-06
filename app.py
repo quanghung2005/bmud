@@ -119,11 +119,11 @@ def login():
         cursor = conn.cursor()
         
         # LỖ HỔNG (VULNERABLE)
-        query = "SELECT * FROM users WHERE username = ? AND password = ?"
+        query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
         print("Executing Query:", query)
         
         try:
-            cursor.execute(query,(username, password))
+            cursor.execute(query)
             user = cursor.fetchone()
             
             if user:
@@ -237,7 +237,7 @@ def profile():
     # WAF LOGIC: Phát hiện IDOR
     if str(requested_id) != str(session['user_id']) and session.get('role') != 'admin':
         log_attack('IDOR (Broken Access Control)', f"User ID {session['user_id']} cố gắng truy cập trái phép hồ sơ của User ID {requested_id}")
-        return "Forbidden: Bạn không có quyền xem thông tin này!", 403
+    
     # LỖ HỔNG (VULNERABLE): Vẫn cho phép query database mà không chặn lại
     conn = get_db_connection()
     cursor = conn.cursor()
