@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}Trang Quản Trị Hệ Thống{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <div class="admin-header glass-panel">
+        <h2>🛡️ Trung Tâm Quản Trị Hệ Thống</h2>
+        <p>Quyền truy cập: Admin</p>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-card glass-panel">
+            <h3>👥 Tổng User</h3>
+            <div class="stat-number">{{ total_users }}</div>
+        </div>
+        <div class="stat-card glass-panel alert-error" style="border: 1px solid red;">
+            <h3>🚨 Log Tấn Công</h3>
+            <div class="stat-number" style="color: red;">{{ total_logs }}</div>
+        </div>
+    </div>
+
+    <div class="glass-panel admin-section">
+        <h3>📋 Danh sách Người dùng (Dữ liệu Nhạy cảm)</h3>
+        <p class="subtitle">Bảng này chứa mật khẩu dạng rõ (plaintext). Việc lộ trang này qua SQLi/XSS là cực kỳ nguy hiểm!</p>
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tài khoản</th>
+                    <th>Mật khẩu</th>
+                    <th>Họ Tên</th>
+                    <th>Mã SV/NV</th>
+                    <th>Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.id }}</td>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td class="secret-data">{{ u.password }}</td>
+                    <td>{{ u.full_name }}</td>
+                    <td>{{ u.student_id }}</td>
+                    <td><span class="role-badge {{ u.role }}">{{ u.role }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="glass-panel admin-section">
+        <h3>🔥 Web Application Firewall (WAF) - Log Tấn công</h3>
+        <p class="subtitle">Nhật ký phát hiện các nỗ lực tấn công vào hệ thống.</p>
+        <table class="admin-table attack-table">
+            <thead>
+                <tr>
+                    <th width="20%">Thời gian</th>
+                    <th width="20%">Loại tấn công</th>
+                    <th width="60%">Chi tiết (Payload)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.timestamp }}</td>
+                    <td><strong>{{ log.attack_type }}</strong></td>
+                    <td style="font-family: monospace; color: #dc2626; word-break: break-all;">{{ log.details }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" style="text-align: center;">Chưa ghi nhận cuộc tấn công nào.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

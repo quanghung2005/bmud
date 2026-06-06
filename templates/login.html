@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Đăng nhập - Diễn đàn Sinh viên{% endblock %}
+
+{% block content %}
+<div class="login-container glass-panel">
+    <h2>Đăng nhập Hệ thống</h2>
+    <p class="subtitle">Sử dụng tài khoản sinh viên của bạn</p>
+    
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+            <label for="username">Tên đăng nhập / Mã SV</label>
+            <input type="text" id="username" name="username" placeholder="Nhập tên đăng nhập...">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Mật khẩu</label>
+            <input type="password" id="password" name="password" placeholder="Nhập mật khẩu...">
+        </div>
+        
+        <button type="submit" class="btn-primary">Đăng nhập</button>
+    </form>
+    
+    <div class="hint-box">
+        <strong>Gợi ý Demo SQLi:</strong><br>
+        Tài khoản SV: <code>sinhvien1</code> / <code>123456</code><br>
+        Payload tấn công (Nhập vào ô Tên đăng nhập): <code>' OR '1'='1' --</code><br>
+        <em>(Lưu ý: có dấu -- ở cuối để comment bỏ phần kiểm tra mật khẩu)</em>
+    </div>
+</div>
+{% endblock %}

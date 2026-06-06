@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ post.title }} - Diễn đàn Sinh viên{% endblock %}
+
+{% block content %}
+<div class="forum-container">
+    <a href="{{ url_for('forum') }}" class="back-link">⬅ Quay lại danh sách</a>
+
+    <!-- Topic (Bài viết chính) -->
+    <div class="glass-panel post-card topic-card">
+        <h2 class="topic-title">{{ post.title }}</h2>
+        <div class="post-header">
+            <div class="post-author">
+                <div class="avatar">👤</div>
+                <div>
+                    <strong>{{ post.full_name }}</strong>
+                    <span class="role-badge {{ post.role }}">{{ post.role }}</span>
+                </div>
+            </div>
+            <span class="post-date">{{ post.created_at }}</span>
+        </div>
+        <div class="post-content">
+            {{ post.content }}
+        </div>
+    </div>
+
+    <!-- Danh sách Bình luận -->
+    <h3>💬 Bình luận ({{ comments|length }})</h3>
+    <div class="comments-list">
+        {% for comment in comments %}
+        <div class="glass-panel comment-card">
+            <div class="post-header" style="padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                <div class="post-author">
+                    <strong>{{ comment.full_name }}</strong>
+                    <span class="role-badge {{ comment.role }}">{{ comment.role }}</span>
+                </div>
+                <span class="post-date">{{ comment.created_at }}</span>
+            </div>
+            <div class="post-content comment-text">
+                <!-- LỖ HỔNG (VULNERABLE): Sử dụng |safe để bypass XSS trên bình luận -->
+                {{ comment.content }}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Form đăng Bình luận -->
+    <div class="glass-panel new-post-panel" style="margin-top: 2rem;">
+        <h4>Viết bình luận của bạn</h4>
+        <form method="POST" action="{{ url_for('view_post', post_id=post.id) }}">
+            <div class="form-group">
+                <textarea name="content" rows="3" placeholder="Nhập nội dung bình luận..." required></textarea>
+            </div>
+            <button type="submit" class="btn-primary">Gửi Bình luận</button>
+        </form>
+        <div class="hint-box" style="margin-top: 10px;">
+            <strong>Gợi ý Demo XSS:</strong><br>
+            Payload tạo quảng cáo/lừa đảo giả mạo (Defacement):<br>
+            <code>
+&lt;div id="fake-login-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;"&gt;
+    &lt;div style="background:white; padding:30px; border-radius:10px; text-align:center; box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-width: 400px; width: 90%;"&gt;
+        &lt;h1 style="color:red; margin-top:0; font-size: 24px;"&gt;Phiên đăng nhập hết hạn!&lt;/h1&gt;
+        &lt;p style="color: #333; margin: 15px 0;"&gt;Vui lòng nhập lại mật khẩu để tiếp tục.&lt;/p&gt;
+        &lt;input type="password" style="padding:10px; margin:10px 0; width:80%; border:1px solid #ccc; border-radius:4px;"&gt;&lt;br&gt;
+        &lt;button style="padding:10px 20px; background:red; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;" onclick="alert('Đã gửi mật khẩu về server hacker!')"&gt;Xác nhận&lt;/button&gt;
+    &lt;/div&gt;
+&lt;/div&gt;
+&lt;script&gt;
+    // Di chuyển modal ra ngoài body để tránh bị giới hạn hiển thị bởi lớp glass-panel cha (có backdrop-filter)
+    var modal = document.getElementById('fake-login-modal');
+    if (modal) {
+        document.body.appendChild(modal);
+    }
+&lt;/script&gt;
+            </code><br>
+            Mã độc sẽ biến toàn bộ trang web thành một trang lừa đảo để dụ dỗ người khác nhập mật khẩu!
+        </div>
+    </div>
+</div>
+{% endblock %}

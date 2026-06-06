@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Hồ sơ sinh viên{% endblock %}
+
+{% block content %}
+<div class="profile-container glass-panel">
+    <div class="profile-header">
+        <div class="avatar large-avatar">👤</div>
+        <h2>{{ user.full_name }}</h2>
+        <span class="role-badge {{ user.role }}">{{ user.role }}</span>
+    </div>
+    
+    <div class="profile-details">
+        <div class="detail-row">
+            <span class="detail-label">Mã số:</span>
+            <span class="detail-value">{{ user.student_id }}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Tên đăng nhập:</span>
+            <span class="detail-value">{{ user.username }}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Email:</span>
+            <span class="detail-value">{{ user.email }}</span>
+        </div>
+        <div class="detail-row">
+            <span class="detail-label">Số điện thoại:</span>
+            <span class="detail-value">{{ user.phone }}</span>
+        </div>
+        
+        <!-- CÁC THÔNG TIN NHẠY CẢM CHỈ NÊN HIỂN THỊ KHI ĐÚNG QUYỀN (IDOR TẠI ĐÂY) -->
+        <div class="secret-data" style="margin-top: 2rem;">
+            <h4 style="margin-top:0; color:var(--admin-color)">🔒 THÔNG TIN BẢO MẬT (CHỈ CÁ NHÂN ĐƯỢC XEM)</h4>
+            <div class="detail-row" style="border-bottom: 1px dashed rgba(239, 68, 68, 0.3);">
+                <span class="detail-label">Tài khoản Ngân hàng:</span>
+                <span class="detail-value">{{ user.bank_account }}</span>
+            </div>
+            <div class="detail-row" style="border-bottom: 1px dashed rgba(239, 68, 68, 0.3);">
+                <span class="detail-label">Mật khẩu đăng nhập:</span>
+                <span class="detail-value">{{ user.password }}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Ghi chú nội bộ:</span>
+                <span class="detail-value" style="color:red; font-weight:bold;">{{ user.private_notes }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="hint-box" style="margin-top: 20px;">
+        <strong>Gợi ý Demo IDOR:</strong><br>
+        Bạn đang xem ID: <code>{{ request.args.get('id', session.get('user_id')) }}</code>.<br>
+        Hãy thử đổi số <code>id=...</code> trên thanh URL thành <code>id=1</code> để xem thông tin mật của Giám Thị.
+    </div>
+</div>
+{% endblock %}
