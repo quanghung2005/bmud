@@ -11,6 +11,7 @@
     <nav class="navbar">
         <div class="logo">🎓 StudentForum</div>
         <div class="nav-links">
+            <a href="{{ url_for('reset') }}" style="color: #eab308; font-weight: bold; margin-right: 15px;">[Reset DB]</a>
             {% if session.get('user_id') %}
                 <a href="{{ url_for('forum') }}">Diễn đàn</a>
                 <a href="{{ url_for('profile', id=session.get('user_id')) }}">Hồ sơ</a>

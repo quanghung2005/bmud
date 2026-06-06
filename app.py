@@ -146,6 +146,25 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+@app.route('/reset')
+def reset():
+    session.clear()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DROP TABLE IF EXISTS attack_logs")
+        cursor.execute("DROP TABLE IF EXISTS comments")
+        cursor.execute("DROP TABLE IF EXISTS posts")
+        cursor.execute("DROP TABLE IF EXISTS users")
+        conn.commit()
+    except Exception as e:
+        pass
+    finally:
+        conn.close()
+    init_db()
+    flash('Hệ thống đã được reset về trạng thái ban đầu!', 'success')
+    return redirect(url_for('login'))
+
 @app.route('/forum', methods=['GET', 'POST'])
 def forum():
     if 'user_id' not in session:
