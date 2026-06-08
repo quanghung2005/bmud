@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Diễn đàn Sinh viên{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -24,13 +25,29 @@
     </nav>
 
     <div class="container">
+        <!-- Toast Container -->
+        <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-                <div class="flashes">
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-                </div>
+                <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    const toastContainer = document.getElementById("toast-container");
+                    {% for category, message in messages %}
+                        const toast = document.createElement("div");
+                        toast.className = "toast toast-{{ category }}";
+                        toast.innerHTML = `<i class="fas fa-info-circle"></i> <span>{{ message }}</span>`;
+                        toastContainer.appendChild(toast);
+                        
+                        setTimeout(() => toast.classList.add("show"), 50);
+                        
+                        setTimeout(() => {
+                            toast.classList.remove("show");
+                            setTimeout(() => toast.remove(), 400);
+                        }, 4000);
+                    {% endfor %}
+                });
+                </script>
             {% endif %}
         {% endwith %}
 

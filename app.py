@@ -2,11 +2,12 @@ import sqlite3
 import os
 import re
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory
+import hashlib
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_demo'
-DB_FILE = 'forum_v3.db' # Dùng DB mới để tránh lỗi khóa file (file lock) đang chạy
+DB_FILE = 'forum_v4.db' # Dùng DB mới để tránh lỗi khóa file (file lock) đang chạy
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
@@ -58,13 +59,15 @@ def init_db():
         )
     ''')
 
-    # 4. Bảng Log Tấn Công (Attack Logs)
+    # 4. Bảng Log Tấn Công (Attack Logs) - Chống giả mạo bằng Blockchain-like Hash
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS attack_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             attack_type TEXT,
             details TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            prev_hash TEXT,
+            hash TEXT
         )
     ''')
 
@@ -88,11 +91,23 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Hàm hỗ trợ ghi log tấn công (WAF Mô phỏng)
+# Hàm hỗ trợ ghi log tấn công (Tamper-Resistant WAF)
 def log_attack(attack_type, details):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO attack_logs (attack_type, details) VALUES (?, ?)", (attack_type, details))
+    
+    # Lấy hash của bản ghi trước đó
+    cursor.execute("SELECT hash FROM attack_logs ORDER BY id DESC LIMIT 1")
+    last_log = cursor.fetchone()
+    prev_hash = last_log['hash'] if last_log and last_log['hash'] else "0" * 64
+    
+    # Tạo nội dung để băm (hash)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    content_to_hash = f"{attack_type}|{details}|{timestamp}|{prev_hash}"
+    current_hash = hashlib.sha256(content_to_hash.encode()).hexdigest()
+    
+    cursor.execute("INSERT INTO attack_logs (attack_type, details, timestamp, prev_hash, hash) VALUES (?, ?, ?, ?, ?)", 
+                   (attack_type, details, timestamp, prev_hash, current_hash))
     conn.commit()
     conn.close()
 
@@ -133,13 +148,41 @@ def login():
                 return redirect(url_for('forum'))
             else:
                 flash('Sai tên đăng nhập hoặc mật khẩu!', 'error')
+
         except sqlite3.Error as e:
             flash(f'Lỗi cơ sở dữ liệu: {e}', 'error')
             log_attack('Database Error', f"Lỗi thực thi SQL do payload: {username}")
         finally:
             conn.close()
-            
     return render_template('login.html')
+
+# --- VULNERABILITY 4: INSECURE PASSWORD RESET ---
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        username = request.form['username']
+        new_password = request.form['password']
+        # LỖ HỔNG (VULNERABLE): Đổi mật khẩu mà không cần OTP, Email, hay mật khẩu cũ.
+        # Chỉ cần biết username là có thể tự do đặt lại mật khẩu!
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Kiểm tra xem user có tồn tại không
+        cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+    
+        if user:
+            cursor.execute("UPDATE users SET password = ? WHERE username = ?", (new_password, username))
+            conn.commit()
+            log_attack('Insecure Password Reset', f"Mật khẩu của tài khoản '{username}' đã bị thay đổi trái phép thành '{new_password}'!")
+            flash(f'Đã đổi mật khẩu cho tài khoản {username} thành công!', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash('Tài khoản không tồn tại!', 'error')
+            
+        conn.close()
+        
+    return render_template('reset_password.html')
 
 @app.route('/logout')
 def logout():
@@ -211,7 +254,7 @@ def view_post(post_id):
         # WAF LOGIC: Phát hiện dấu hiệu XSS
         if "<script>" in content.lower() or "javascript:" in content.lower() or "onerror=" in content.lower():
             log_attack('Cross-Site Scripting (XSS)', f"User ID {author_id} cố gắng chèn mã độc vào bài viết #{post_id}. Payload: {content}")
-
+        
         cursor.execute("INSERT INTO comments (post_id, author_id, content) VALUES (?, ?, ?)", (post_id, author_id, content))
         conn.commit()
         flash('Đã gửi bình luận!', 'success')
@@ -256,7 +299,6 @@ def profile():
     # WAF LOGIC: Phát hiện IDOR
     if str(requested_id) != str(session['user_id']) and session.get('role') != 'admin':
         log_attack('IDOR (Broken Access Control)', f"User ID {session['user_id']} cố gắng truy cập trái phép hồ sơ của User ID {requested_id}")
-    
     # LỖ HỔNG (VULNERABLE): Vẫn cho phép query database mà không chặn lại
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -270,35 +312,101 @@ def profile():
     else:
         return "Không tìm thấy người dùng", 404
 
+# --- WAF: Kiểm tra tính toàn vẹn của Log ---
+def verify_logs_integrity(logs):
+    verified_logs = []
+    expected_prev = "0" * 64
+    
+    for log in logs:
+        log_dict = dict(log)
+        
+        # Băm lại dữ liệu hiện tại
+        content_to_hash = f"{log['attack_type']}|{log['details']}|{log['timestamp']}|{log['prev_hash']}"
+        recalculated_hash = hashlib.sha256(content_to_hash.encode()).hexdigest()
+        
+        # Kiểm tra tính toàn vẹn
+        if recalculated_hash == log['hash'] and log['prev_hash'] == expected_prev:
+            log_dict['is_valid'] = True
+        else:
+            log_dict['is_valid'] = False
+            
+        expected_prev = log['hash']
+        verified_logs.append(log_dict)
+        
+    return verified_logs
+
+
+
 # --- ADMIN DASHBOARD ---
 @app.route('/admin')
 def admin_dashboard():
-    # CHỈ CÓ ADMIN MỚI ĐƯỢC VÀO TRANG NÀY
-    if 'user_id' not in session or session.get('role') != 'admin':
-        log_attack('Unauthorized Access', f"User ID {session.get('user_id', 'Guest')} cố gắng truy cập trang Quản trị Admin.")
-        flash('Bạn không có quyền truy cập trang này!', 'error')
+    if session.get('role') != 'admin':
+        log_attack('Unauthorized Access', f"User {session.get('user_id', 'Guest')} cố gắng truy cập trang Admin")
+        flash('Bạn không có quyền truy cập trang này.', 'error')
         return redirect(url_for('forum'))
         
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Lấy thống kê
-    cursor.execute("SELECT COUNT(*) as count FROM users")
-    total_users = cursor.fetchone()['count']
-    cursor.execute("SELECT COUNT(*) as count FROM attack_logs")
-    total_logs = cursor.fetchone()['count']
-    
-    # Lấy danh sách users (Dữ liệu nhạy cảm)
     cursor.execute("SELECT * FROM users")
-    all_users = cursor.fetchall()
+    users = cursor.fetchall()
     
-    # Lấy logs tấn công
-    cursor.execute("SELECT * FROM attack_logs ORDER BY timestamp DESC LIMIT 20")
-    attack_logs = cursor.fetchall()
+    cursor.execute("SELECT * FROM attack_logs ORDER BY id ASC") # Phải lấy tăng dần để kiểm tra hash chain
+    logs = cursor.fetchall()
     
     conn.close()
     
-    return render_template('admin.html', total_users=total_users, total_logs=total_logs, users=all_users, logs=attack_logs)
+    # Kiểm tra toàn vẹn
+    verified_logs = verify_logs_integrity(logs)
+    verified_logs.reverse() # Đảo lại để hiển thị mới nhất lên đầu
+    
+    return render_template('admin.html', 
+                         users=users, 
+                         logs=verified_logs, 
+                         total_users=len(users), 
+                         total_logs=len(logs))
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+def delete_user(user_id):
+    if session.get('role') != 'admin':
+        return "Forbidden", 403
+        
+    if user_id == 1:
+        flash("Không thể xóa Admin chính!", "error")
+        return redirect(url_for('admin_dashboard'))
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    
+    log_attack('Data Deletion', f"Admin đã xóa người dùng ID: {user_id}")
+    flash("Xóa người dùng thành công", "success")
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/toggle_role/<int:user_id>', methods=['POST'])
+def toggle_role(user_id):
+    if session.get('role') != 'admin':
+        return "Forbidden", 403
+        
+    if user_id == 1:
+        flash("Không thể đổi quyền Admin chính!", "error")
+        return redirect(url_for('admin_dashboard'))
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    
+    new_role = 'admin' if user['role'] == 'student' else 'student'
+    cursor.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, user_id))
+    conn.commit()
+    conn.close()
+    
+    log_attack('Role Changed', f"Admin đã đổi quyền user ID: {user_id} thành {new_role}")
+    flash(f"Đã cập nhật quyền thành {new_role}", "success")
+    return redirect(url_for('admin_dashboard'))
 
 if __name__ == '__main__':
     print("Starting Student Forum at http://127.0.0.1:5000")

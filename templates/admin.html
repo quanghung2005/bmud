@@ -9,14 +9,17 @@
         <p>Quyền truy cập: Admin</p>
     </div>
 
-    <div class="stats-row">
-        <div class="stat-card glass-panel">
+    <div class="stats-row" style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 1.5rem;">
+        <div class="stat-card glass-panel" style="display: flex; flex-direction: column; justify-content: center;">
             <h3>👥 Tổng User</h3>
             <div class="stat-number">{{ total_users }}</div>
         </div>
-        <div class="stat-card glass-panel alert-error" style="border: 1px solid red;">
+        <div class="stat-card glass-panel alert-error" style="border: 1px solid red; display: flex; flex-direction: column; justify-content: center;">
             <h3>🚨 Log Tấn Công</h3>
             <div class="stat-number" style="color: red;">{{ total_logs }}</div>
+        </div>
+        <div class="stat-card glass-panel" style="padding: 1rem;">
+            <canvas id="attackChart" style="max-height: 200px;"></canvas>
         </div>
     </div>
 
@@ -32,6 +35,7 @@
                     <th>Họ Tên</th>
                     <th>Mã SV/NV</th>
                     <th>Role</th>
+                    <th>Hành động</th>
                 </tr>
             </thead>
             <tbody>
@@ -43,6 +47,16 @@
                     <td>{{ u.full_name }}</td>
                     <td>{{ u.student_id }}</td>
                     <td><span class="role-badge {{ u.role }}">{{ u.role }}</span></td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <form action="{{ url_for('toggle_role', user_id=u.id) }}" method="POST" style="margin: 0;">
+                                <button type="submit" class="btn-primary" style="padding: 4px 8px; font-size: 12px; width: auto;" title="Đổi quyền Admin/Student">🔄 Quyền</button>
+                            </form>
+                            <form action="{{ url_for('delete_user', user_id=u.id) }}" method="POST" style="margin: 0;" onsubmit="return confirm('Bạn có chắc chắn muốn xóa user này không?');">
+                                <button type="submit" class="btn-primary" style="padding: 4px 8px; font-size: 12px; width: auto; background: #ef4444;" title="Xóa User">🗑️ Xóa</button>
+                            </form>
+                        </div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -51,13 +65,14 @@
 
     <div class="glass-panel admin-section">
         <h3>🔥 Web Application Firewall (WAF) - Log Tấn công</h3>
-        <p class="subtitle">Nhật ký phát hiện các nỗ lực tấn công vào hệ thống.</p>
+        <p class="subtitle">Nhật ký phát hiện các nỗ lực tấn công vào hệ thống. Được bảo vệ bởi thuật toán <strong>Hash Chaining</strong> chống giả mạo.</p>
         <table class="admin-table attack-table">
             <thead>
                 <tr>
-                    <th width="20%">Thời gian</th>
-                    <th width="20%">Loại tấn công</th>
-                    <th width="60%">Chi tiết (Payload)</th>
+                    <th width="15%">Thời gian</th>
+                    <th width="15%">Loại tấn công</th>
+                    <th width="50%">Chi tiết (Payload)</th>
+                    <th width="20%">Toàn vẹn Dữ liệu</th>
                 </tr>
             </thead>
             <tbody>
@@ -66,6 +81,14 @@
                     <td>{{ log.timestamp }}</td>
                     <td><strong>{{ log.attack_type }}</strong></td>
                     <td style="font-family: monospace; color: #dc2626; word-break: break-all;">{{ log.details }}</td>
+                    <td>
+                        {% if log.is_valid %}
+                            <span style="color: #10b981; font-weight: bold;"><i class="fas fa-check-circle"></i> Hợp lệ</span>
+                        {% else %}
+                            <span style="color: #ef4444; font-weight: bold; animation: pulse 1s infinite;"><i class="fas fa-exclamation-triangle"></i> BỊ GIẢ MẠO!</span>
+                        {% endif %}
+                        <br><span style="font-size: 10px; color: #6b7280; font-family: monospace;">Hash: {{ log.hash[:8] }}...</span>
+                    </td>
                 </tr>
                 {% else %}
                 <tr>
@@ -75,5 +98,40 @@
             </tbody>
         </table>
     </div>
+    </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const attackCounts = {};
+    {% for log in logs %}
+        attackCounts["{{ log.attack_type }}"] = (attackCounts["{{ log.attack_type }}"] || 0) + 1;
+    {% endfor %}
+
+    const ctx = document.getElementById('attackChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(attackCounts).length ? Object.keys(attackCounts) : ['Chưa có tấn công'],
+            datasets: [{
+                label: 'Số lần',
+                data: Object.keys(attackCounts).length ? Object.values(attackCounts) : [1],
+                backgroundColor: [
+                    'rgba(239, 68, 68, 0.8)',
+                    'rgba(245, 158, 11, 0.8)',
+                    'rgba(59, 130, 246, 0.8)',
+                    'rgba(16, 185, 129, 0.8)'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right' }
+            }
+        }
+    });
+</script>
 {% endblock %}

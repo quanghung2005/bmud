@@ -1,11 +1,11 @@
-# Hướng dẫn Demo: Diễn đàn Sinh viên (Phiên bản V3 Nâng cấp)
+# Hướng dẫn Demo: Diễn đàn Sinh viên (Phiên bản V4 Final)
 
-Đây là tài liệu hướng dẫn chi tiết cách chạy ứng dụng phiên bản V3 (đã bổ sung Trang Admin và hệ thống Ghi log tấn công - WAF), thực hiện các kịch bản tấn công (Attack) và cách sửa code trực tiếp (Defense).
+Đây là tài liệu hướng dẫn chi tiết cách chạy ứng dụng phiên bản V4 (đã bổ sung Trang Admin, hệ thống Ghi log tấn công - WAF, giao diện mới và 4 lỗi bảo mật), thực hiện các kịch bản tấn công (Attack) và cách sửa code trực tiếp (Defense).
 
 ## 🚀 Cách chạy ứng dụng
 
 1. Vì chúng ta vừa cập nhật code, hãy **Tắt server cũ** (Nhấn `Ctrl + C` ở cửa sổ Terminal).
-2. Chạy lại lệnh: `python app.py`. Hệ thống sẽ tự động khởi tạo cơ sở dữ liệu mới (`forum_v3.db`).
+2. Chạy lại lệnh: `python app.py`. Hệ thống sẽ tự động khởi tạo cơ sở dữ liệu mới (`forum_v4.db`).
 3. Mở trình duyệt và truy cập: [http://127.0.0.1:5000](http://127.0.0.1:5000).
 
 ---
@@ -23,8 +23,8 @@
   6. **Cực kỳ nguy hiểm:** Bạn có thể nhìn thấy danh sách tất cả user kèm theo **mật khẩu plaintext** (chữ không mã hóa). Đồng thời bạn cũng nhìn thấy "Nhật ký tấn công" ghi nhận lại nỗ lực SQLi vừa nãy của chính bạn!
 
 - **Kịch bản Vá lỗi trực tiếp (Defense):**
-  1. Mở file [app.py](file:///c:/Users/trieu/Downloads/bảo mật ứng dụng/vulnerable-student-forum/app.py).
-  2. Tìm đến hàm `@app.route('/login')` (khoảng dòng 108).
+  1. Mở file `app.py`.
+  2. Tìm đến hàm `@app.route('/login')` (khoảng dòng 111).
   3. Xóa đoạn code: `query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"` và `cursor.execute(query)`.
   4. Thay bằng: 
      ```python
@@ -47,7 +47,7 @@
   5. **Log WAF:** Nếu Admin vào trang Quản trị, họ sẽ thấy hệ thống đã ghi log cảnh báo việc bạn chèn thẻ HTML lạ.
 
 - **Kịch bản Vá lỗi trực tiếp (Defense):**
-  1. Mở file [post.html](file:///c:/Users/trieu/Downloads/bảo mật ứng dụng/vulnerable-student-forum/templates/post.html).
+  1. Mở file `templates/post.html`.
   2. Tìm đến dòng hiển thị nội dung bình luận (khoảng dòng 41):
      ```html
      {{ comment.content | safe }}
@@ -71,8 +71,8 @@
   4. **Log WAF:** Hệ thống sẽ âm thầm ghi lại một cảnh báo IDOR vào cơ sở dữ liệu. Admin có thể xem được trong trang Quản trị.
 
 - **Kịch bản Vá lỗi trực tiếp (Defense):**
-  1. Mở file [app.py](file:///c:/Users/trieu/Downloads/bảo mật ứng dụng/vulnerable-student-forum/app.py).
-  2. Tìm đến hàm `@app.route('/profile')` (khoảng dòng 227).
+  1. Mở file `app.py`.
+  2. Tìm đến hàm `@app.route('/profile')` (khoảng dòng 249).
   3. Thêm lệnh `return` ngay dưới dòng `log_attack(...)` để chặn truy cập:
      ```python
      if str(requested_id) != str(session['user_id']) and session.get('role') != 'admin':
@@ -80,3 +80,50 @@
          return "Forbidden: Bạn không có quyền xem thông tin này!", 403
      ```
   4. Save file, khởi động lại server và kiểm tra.
+
+---
+
+## 4. Broken Authentication (Insecure Password Reset) & WAF Log Toàn vẹn
+
+**Tình huống:** Chức năng "Quên mật khẩu" của hệ thống được lập trình quá lỏng lẻo. Nó không yêu cầu mã OTP, không cần email xác nhận, cũng không bắt buộc nhập mật khẩu cũ. Chỉ cần biết Username là ai cũng có thể đổi mật khẩu của người đó. Đồng thời, ta sẽ trình diễn cơ chế Hash-chaining bảo vệ tính toàn vẹn của Log hệ thống.
+
+- **Kịch bản Tấn công (Attack):**
+  1. Hãy đăng xuất khỏi mọi tài khoản. Tại trang Đăng nhập, bấm vào liên kết **"Quên mật khẩu? Nhấn vào đây để đặt lại"**.
+  2. Nhập Username là `admin` và Mật khẩu mới là `hacked123`. Bấm Cập nhật.
+  3. Hệ thống báo đổi mật khẩu thành công! Giờ bạn có thể quay lại trang đăng nhập, dùng `admin` và `hacked123` để đăng nhập vào quyền cao nhất.
+  4. Hệ thống WAF đã ghi nhận lại hành vi đổi mật khẩu lỏng lẻo này thành log cảnh báo.
+
+- **Kịch bản Trình diễn Chống Giả Mạo Log (Tamper-Resistant WAF):**
+  Hệ thống WAF sử dụng thuật toán Băm (Hash Chaining) tương tự Blockchain. Mỗi dòng log lưu mã băm của dòng trước đó. Nếu hacker tấn công vào DB và sửa tay bất cứ dòng nào, chuỗi sẽ đứt gãy.
+  1. Mở phần mềm duyệt DB (như SQLite Studio) và sửa nội dung dòng log cảnh báo "Insecure Password Reset" thành dòng chữ bất kỳ để che giấu dấu vết.
+  2. Khi load lại trang Admin Dashboard, hệ thống WAF kiểm tra lại hàm băm và phát hiện dấu vân tay (hash) không khớp.
+  3. Dòng log đó và tất cả các dòng log sau nó sẽ bị gắn nhãn đỏ lòm cảnh báo "🚨 BỊ GIẢ MẠO!".
+
+- **Kịch bản Vá lỗi trực tiếp (Defense):**
+  Để vá lỗi này hoàn chỉnh, chúng ta cần bổ sung trường nhập mã xác thực (OTP) ở cả giao diện lẫn backend. Đây là ví dụ mô phỏng việc bắt buộc nhập mã OTP (dùng mã tĩnh `123456` cho demo):
+  
+  **Bước 1: Sửa giao diện (Frontend)**
+  1. Mở file `templates/reset_password.html`.
+  2. Thêm đoạn mã HTML tạo ô nhập OTP này vào bên trong thẻ `<form>`, nằm ngay trên nút "Cập nhật Mật khẩu":
+     ```html
+     <div style="text-align: left;">
+         <label for="otp" style="font-weight: bold; margin-bottom: 5px; display: block;">Mã xác thực OTP (Nhập 123456):</label>
+         <input type="text" id="otp" name="otp" required style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: white;">
+     </div>
+     ```
+
+  **Bước 2: Sửa logic xử lý (Backend)**
+  1. Mở file `app.py`.
+  2. Tìm đến hàm `@app.route('/reset_password')` (khoảng dòng 162).
+     3. Thêm đoạn code kiểm tra mã OTP ngay bên dưới dòng `new_password = request.form['password']` (Lưu ý: Bạn hãy copy dán cẩn thận để giữ nguyên khoảng trắng đầu dòng cho chuẩn Python nhé):
+        ```python
+        # Vá lỗi: Yêu cầu mã OTP (mã tĩnh '123456' để demo)
+        otp = request.form.get('otp', '')
+        if otp != '123456':
+            flash('Mã OTP không hợp lệ! Đổi mật khẩu thất bại.', 'error')
+            log_attack('Failed Password Reset', f"Sai OTP khi cố đổi pass của {username}")
+            return render_template('reset_password.html')
+        ```
+  4. Khởi động lại server và thử đổi mật khẩu bằng một mã OTP sai. Hệ thống sẽ chặn đứng hành vi này!
+  
+  *(Lưu ý: Trong thực tế, hệ thống không dùng mã tĩnh mà phải tạo ngẫu nhiên một mã OTP gồm 6 số, lưu vào Session/Database và gửi qua Email/SMS của chính chủ tài khoản để xác minh).*
