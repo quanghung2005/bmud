@@ -100,30 +100,62 @@
   3. Dòng log đó và tất cả các dòng log sau nó sẽ bị gắn nhãn đỏ lòm cảnh báo "🚨 BỊ GIẢ MẠO!".
 
 - **Kịch bản Vá lỗi trực tiếp (Defense):**
-  Để vá lỗi này hoàn chỉnh, chúng ta cần bổ sung trường nhập mã xác thực (OTP) ở cả giao diện lẫn backend. Đây là ví dụ mô phỏng việc bắt buộc nhập mã OTP (dùng mã tĩnh `123456` cho demo):
+  Để vá lỗi này hoàn chỉnh theo chuẩn thực tế, chúng ta cần bổ sung tính năng tự động tạo mã OTP ngẫu nhiên, mô phỏng việc gửi OTP qua Email, sau đó lưu OTP vào phiên làm việc (`session`) để đối chiếu.
   
   **Bước 1: Sửa giao diện (Frontend)**
   1. Mở file `templates/reset_password.html`.
-  2. Thêm đoạn mã HTML tạo ô nhập OTP này vào bên trong thẻ `<form>`, nằm ngay trên nút "Cập nhật Mật khẩu":
+  2. Xóa nút "Cập nhật Mật khẩu" cũ và thay bằng đoạn mã HTML + JS sau (Đoạn mã này thêm nút Lấy mã OTP và form sẽ post lên server khi có đủ thông tin):
      ```html
      <div style="text-align: left;">
-         <label for="otp" style="font-weight: bold; margin-bottom: 5px; display: block;">Mã xác thực OTP (Nhập 123456):</label>
-         <input type="text" id="otp" name="otp" required style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: white;">
+         <label for="otp" style="font-weight: bold; margin-bottom: 5px; display: block;">Mã xác thực OTP:</label>
+         <div style="display: flex; gap: 10px;">
+             <input type="text" id="otp" name="otp" required style="width: 70%; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: white;">
+             <button type="button" onclick="sendOTP()" class="btn-primary" style="width: 30%; background: #10b981;">Lấy OTP</button>
+         </div>
      </div>
+     
+     <button type="submit" class="btn-primary" style="margin-top: 10px;">Cập nhật Mật khẩu</button>
+     
+     <script>
+     function sendOTP() {
+         const username = document.getElementById('username').value;
+         if(!username) { alert("Vui lòng nhập Tên đăng nhập trước!"); return; }
+         fetch('/send_otp', {
+             method: 'POST',
+             headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+             body: 'username=' + encodeURIComponent(username)
+         })
+         .then(response => response.text())
+         .then(data => {
+             alert(data); // Mô phỏng hiển thị Email nhận được
+         });
+     }
+     </script>
      ```
 
   **Bước 2: Sửa logic xử lý (Backend)**
   1. Mở file `app.py`.
-  2. Tìm đến hàm `@app.route('/reset_password')` (khoảng dòng 162).
-     3. Thêm đoạn code kiểm tra mã OTP ngay bên dưới dòng `new_password = request.form['password']` (Lưu ý: Bạn hãy copy dán cẩn thận để giữ nguyên khoảng trắng đầu dòng cho chuẩn Python nhé):
-        ```python
-        # Vá lỗi: Yêu cầu mã OTP (mã tĩnh '123456' để demo)
-        otp = request.form.get('otp', '')
-        if otp != '123456':
-            flash('Mã OTP không hợp lệ! Đổi mật khẩu thất bại.', 'error')
-            log_attack('Failed Password Reset', f"Sai OTP khi cố đổi pass của {username}")
-            return render_template('reset_password.html')
-        ```
-  4. Khởi động lại server và thử đổi mật khẩu bằng một mã OTP sai. Hệ thống sẽ chặn đứng hành vi này!
-  
-  *(Lưu ý: Trong thực tế, hệ thống không dùng mã tĩnh mà phải tạo ngẫu nhiên một mã OTP gồm 6 số, lưu vào Session/Database và gửi qua Email/SMS của chính chủ tài khoản để xác minh).*
+  2. Tìm khu vực các Route (ví dụ ngay trên hàm `@app.route('/reset_password')` ở khoảng dòng 160).
+  3. Thêm một hàm mới chuyên dùng để sinh mã OTP ngẫu nhiên:
+     ```python
+     import random
+     @app.route('/send_otp', methods=['POST'])
+     def send_otp():
+         otp = str(random.randint(100000, 999999))
+         session['reset_otp'] = otp # Lưu OTP vào Session an toàn ở phía Server
+         return f"[Mô phỏng Email] Hệ thống đã gửi mã OTP của bạn là: {otp}"
+     ```
+  4. Trong hàm `@app.route('/reset_password')` ngay bên dưới dòng `new_password = request.form['password']`, thêm đoạn kiểm tra Session này:
+     ```python
+         # Vá lỗi: Đối chiếu OTP người dùng nhập với OTP trong Session
+         otp_input = request.form.get('otp', '')
+         saved_otp = session.get('reset_otp')
+         
+         if not saved_otp or otp_input != saved_otp:
+             flash('Mã OTP không hợp lệ hoặc đã hết hạn!', 'error')
+             log_attack('Failed Password Reset', f"Sai OTP khi cố đổi pass của {username}")
+             return render_template('reset_password.html')
+         
+         session.pop('reset_otp', None) # Xóa OTP sau khi dùng xong
+     ```
+  5. Khởi động lại server, bấm "Lấy OTP", chờ alert báo mã mô phỏng, nhập sai mã để xem hệ thống chặn, sau đó nhập đúng mã để đổi mật khẩu thành công!
